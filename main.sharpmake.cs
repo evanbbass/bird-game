@@ -52,9 +52,14 @@ public class BirdGameProject : Project
 	[Configure]
 	public void ConfigureAll(Project.Configuration conf, Target target)
 	{
+		conf.ProjectName = "BirdGame";
+
 		// Specify where the generated project will be. Here we generate the
 		// vcxproj in a /generated directory.
 		conf.ProjectPath = Path.Combine("[project.SharpmakeCsPath]", "generated");
+
+		// Add include path
+		conf.IncludePaths.Add(Path.Combine("[project.SharpmakeCsPath]", "include"));
 	}
 }
 
