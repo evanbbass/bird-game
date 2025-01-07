@@ -1,3 +1,5 @@
+#include "pch.h"
+
 #include "Application.h"
 
 _Use_decl_annotations_

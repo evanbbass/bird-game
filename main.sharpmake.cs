@@ -71,6 +71,9 @@ public class BirdGameProject : Project
 
 		conf.Options.Add(Options.Vc.Linker.SubSystem.Windows);
 		conf.Options.Add(Options.Vc.Linker.LargeAddress.SupportLargerThan2Gb);
+
+		conf.PrecompHeader = "pch.h";
+		conf.PrecompSource = "pch.cpp";
 	}
 }
 
