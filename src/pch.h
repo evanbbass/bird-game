@@ -1,5 +1,8 @@
 #pragma once
 
+// Windows
+#include <Windows.h>
+
 // Standard libraries
 #include <cstdint>
 #include <memory>
