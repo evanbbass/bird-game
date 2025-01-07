@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Renderer.h"
 #include "Window.h"
 
 #include <memory>
@@ -16,6 +17,10 @@ namespace BirdGame
 
 		int Run();
 
+		// Windows message handlers
+		void MouseDown(uint8_t param);
+		void MouseUp(uint8_t param);
+
 	private:
 		Application();
 		Application(const Application&) = delete; // Don't allow copy of App instance
@@ -24,6 +29,7 @@ namespace BirdGame
 		void Render();
 
 		Window mWindow;
+		Renderer mRenderer;
 
 		static std::unique_ptr<Application> mInstance;
 	};

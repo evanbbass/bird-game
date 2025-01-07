@@ -1,11 +1,13 @@
 #include "Window.h"
 
+#include "Application.h"
+
 #include <assert.h>
 
 BirdGame::Window::Window() :
 	mHWND(NULL),
-	mWidth(640),
-	mHeight(480)
+	mWidth(100),
+	mHeight(100)
 {
 }
 

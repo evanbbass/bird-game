@@ -64,6 +64,10 @@ public class BirdGameProject : Project
 		conf.Options.Add(Options.Vc.General.CharacterSet.Unicode);
 		conf.Options.Add(Options.Vc.General.WarningLevel.Level3);
 		conf.Options.Add(Options.Vc.General.TreatWarningsAsErrors.Enable);
+		conf.Options.Add(Options.Vc.General.WindowsTargetPlatformVersion.Latest);
+
+		conf.Options.Add(Options.Vc.Compiler.CppLanguageStandard.CPP17);
+		conf.Options.Add(Options.Vc.Compiler.Exceptions.Enable);
 
 		conf.Options.Add(Options.Vc.Linker.SubSystem.Windows);
 		conf.Options.Add(Options.Vc.Linker.LargeAddress.SupportLargerThan2Gb);

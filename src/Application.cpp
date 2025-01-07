@@ -15,8 +15,8 @@ BirdGame::Application::~Application()
 void BirdGame::Application::Initialize(HINSTANCE hInstance, int nCmdShow)
 {
 	mInstance.reset(new Application());
-	mInstance->mWindow.Initialize(L"Bird Game", 640, 480, hInstance, nCmdShow);
-	// TODO initialize mRenderer
+	mInstance->mWindow.Initialize(L"Bird Game", 960, 720, hInstance, nCmdShow);
+	mInstance->mRenderer.Initialize(mInstance->mWindow);
 }
 
 BirdGame::Application& BirdGame::Application::Instance()
@@ -35,10 +35,19 @@ int BirdGame::Application::Run()
 	return 0;
 }
 
+void BirdGame::Application::MouseDown(uint8_t /*param*/)
+{
+}
+
+void BirdGame::Application::MouseUp(uint8_t /*param*/)
+{
+}
+
 void BirdGame::Application::Update()
 {
 }
 
 void BirdGame::Application::Render()
 {
+	mRenderer.Render();
 }
