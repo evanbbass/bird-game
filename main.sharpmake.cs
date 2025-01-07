@@ -15,7 +15,7 @@ public class BirdGameProject : Project
         // The directory that contains the source code we want to build is the
         // same as this one. This string essentially means "the directory of
         // the script you're reading right now."
-        SourceRootPath = @"[project.SharpmakeCsPath]\src";
+        SourceRootPath = Path.Combine("[project.SharpmakeCsPath]", "src");
 
         // Specify the targets for which we want to generate a configuration
         // for. Instead of creating multiple targets manually here, we can
@@ -60,6 +60,13 @@ public class BirdGameProject : Project
 
 		// Add include path
 		conf.IncludePaths.Add(Path.Combine("[project.SharpmakeCsPath]", "include"));
+
+		conf.Options.Add(Options.Vc.General.CharacterSet.Unicode);
+		conf.Options.Add(Options.Vc.General.WarningLevel.Level3);
+		conf.Options.Add(Options.Vc.General.TreatWarningsAsErrors.Enable);
+
+		conf.Options.Add(Options.Vc.Linker.SubSystem.Windows);
+		conf.Options.Add(Options.Vc.Linker.LargeAddress.SupportLargerThan2Gb);
 	}
 }
 
@@ -88,7 +95,7 @@ public class BirdGameSolution : Solution
 	public void ConfigureAll(Solution.Configuration conf, Target target)
 	{
 		// Puts the generated solution in the /generated folder too.
-		conf.SolutionPath = @"[solution.SharpmakeCsPath]\generated";
+		conf.SolutionPath = Path.Combine("[solution.SharpmakeCsPath]", "generated");
 
 		// Adds the project described by BasicsProject into the solution.
 		// Note that this is done in the configuration, so you can generate

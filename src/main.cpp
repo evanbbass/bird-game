@@ -1,6 +1,8 @@
-#include <iostream>
+#include "Application.h"
 
-int main(int argc, char** argv)
+_Use_decl_annotations_
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPWSTR /*lpCmdLine*/, int nShowCmd)
 {
-	std::cout << "Hello, Sharpmake!" << std::endl;
+	BirdGame::Application::Initialize(hInstance, nShowCmd);
+	return BirdGame::Application::Instance().Run();
 }
