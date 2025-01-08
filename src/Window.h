@@ -23,6 +23,9 @@ namespace BirdGame
 	private:
 		Window(const Window&) = delete;
 
+		static const std::wstring sWindowClassName;
+		static const std::wstring sWindowTitle;
+
 		HWND mHWND;
 		uint32_t mWidth;
 		uint32_t mHeight;
