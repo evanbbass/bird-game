@@ -5,7 +5,7 @@
 
 namespace BirdGame
 {
-	class Window
+	class Window final
 	{
 	public:
 		Window();

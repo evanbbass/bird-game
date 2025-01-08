@@ -7,7 +7,7 @@
 
 namespace BirdGame
 {
-	class Application
+	class Application final
 	{
 	public:
 		~Application();

@@ -11,7 +11,7 @@ namespace BirdGame
 
 namespace BirdGame
 {
-	class Renderer
+	class Renderer final
 	{
 	public:
 		Renderer();
