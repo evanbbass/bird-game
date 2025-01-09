@@ -50,6 +50,7 @@ public class BirdGameProject : Project
 		conf.Options.Add(Options.Vc.General.TreatWarningsAsErrors.Enable);
         if (target.DevEnv == DevEnv.vs2017)
         {
+            // For some reason for my VS2017, latest targets Windows 8.1, so specify a Windows 10 version
             conf.Options.Add(Options.Vc.General.WindowsTargetPlatformVersion.v10_0_17763_0);
         }
         else
@@ -65,6 +66,11 @@ public class BirdGameProject : Project
 
 		conf.PrecompHeader = "pch.h";
 		conf.PrecompSource = "pch.cpp";
+
+		conf.LibraryFiles.Add("d3d12");
+		conf.LibraryFiles.Add("dxgi");
+		conf.LibraryFiles.Add("d3dcompiler");
+		conf.LibraryFiles.Add("dxguid");
 	}
 }
 
