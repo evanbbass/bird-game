@@ -12,6 +12,9 @@ public class BirdGameProject : Project
         // The directory that contains the source code we want to build
         SourceRootPath = Path.Combine("[project.SharpmakeCsPath]", "src");
 
+        // TODO trying to add the shaders to the project but this doesn't work??
+        //AdditionalSourceRootPaths.Add(Path.Combine("[project.SharpmakeCsPath]", "assets"));
+
         // Specify the targets for which we want to generate a configuration for
         // Include both VS2017 and VS2022 since IG PCs are on 2017
         AddTargets(new Target(

@@ -45,11 +45,12 @@ namespace BirdGame
 		void ExecuteCommandList();
 		void Present();
 
-		// TODO this is apparently bad
+		// TODO apparently this is bad, look into the frame buffer DX sample project
 		void WaitForPreviousFrame();
 
 	private:
 		void CreateCommandList();
+		void LoadShaders();
 		void CreateFence();
 
 		ComPtr<ID3D12Device> mDevice;
@@ -89,7 +90,7 @@ BirdGame::RendererImpl::RendererImpl() :
 BirdGame::RendererImpl::~RendererImpl()
 {
 	// TODO should we do this?
-	// Shutdown()
+	// Shutdown();
 }
 
 void BirdGame::RendererImpl::CreateDevice()
@@ -202,7 +203,35 @@ void BirdGame::RendererImpl::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t
 void BirdGame::RendererImpl::LoadAssets()
 {
 	CreateCommandList();
+	LoadShaders();
 	CreateFence();
+}
+
+void BirdGame::RendererImpl::PopulateCommandList()
+{
+	// Command list allocators can only be reset when the associated 
+	// command lists have finished execution on the GPU; apps should use 
+	// fences to determine GPU execution progress.
+	CheckHResult(mCommandAllocator->Reset());
+
+	// However, when ExecuteCommandList() is called on a particular command 
+	// list, that command list can then be reset at any time and must be before 
+	// re-recording.
+	CheckHResult(mCommandList->Reset(mCommandAllocator.Get(), mPipelineState.Get()));
+
+	// Indicate that the back buffer will be used as a render target.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), mFrameIndex, mRtvDescriptorSize);
+
+	// Record commands.
+	const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+
+	// Indicate that the back buffer will now be used to present.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+	CheckHResult(mCommandList->Close());
 }
 
 void BirdGame::RendererImpl::ExecuteCommandList()
@@ -249,6 +278,11 @@ void BirdGame::RendererImpl::CreateCommandList()
 	CheckHResult(mCommandList->Close());
 }
 
+void BirdGame::RendererImpl::LoadShaders()
+{
+	// TODO
+}
+
 // A fence is a synchronization primitive that we can use to signal that the GPU is done rendering a frame
 void BirdGame::RendererImpl::CreateFence()
 {
@@ -261,33 +295,6 @@ void BirdGame::RendererImpl::CreateFence()
 	{
 		CheckHResult(HRESULT_FROM_WIN32(GetLastError()));
 	}
-}
-
-void BirdGame::RendererImpl::PopulateCommandList()
-{
-	// Command list allocators can only be reset when the associated 
-	// command lists have finished execution on the GPU; apps should use 
-	// fences to determine GPU execution progress.
-	CheckHResult(mCommandAllocator->Reset());
-
-	// However, when ExecuteCommandList() is called on a particular command 
-	// list, that command list can then be reset at any time and must be before 
-	// re-recording.
-	CheckHResult(mCommandList->Reset(mCommandAllocator.Get(), mPipelineState.Get()));
-
-	// Indicate that the back buffer will be used as a render target.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), mFrameIndex, mRtvDescriptorSize);
-
-	// Record commands.
-	const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
-	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-
-	// Indicate that the back buffer will now be used to present.
-	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-
-	CheckHResult(mCommandList->Close());
 }
 
 #pragma endregion
