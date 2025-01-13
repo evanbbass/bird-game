@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Renderer.h"
 
+#include "Window.h"
 
 // Note that while ComPtr is used to manage the lifetime of resources on the CPU,
 // it has no understanding of the lifetime of resources on the GPU. Apps must account
@@ -30,24 +31,27 @@ namespace BirdGame
 	class RendererImpl
 	{
 	public:
-		RendererImpl() = default;
-		~RendererImpl() = default;
+		RendererImpl();
+		~RendererImpl();
 
+		// Initialization methods
 		void CreateDevice();
 		void CreateCommandQueue();
 		void CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height);
+		void LoadAssets();
+
+		// Render methods
+		void PopulateCommandList();
+		void ExecuteCommandList();
+		void Present();
+
+		// TODO this is apparently bad
+		void WaitForPreviousFrame();
+
+	private:
 		void CreateCommandList();
 		void CreateFence();
 
-		void InitializeTriangleRenderer();
-
-		void PopulateCommandListAndSubmit();
-		void Present();
-		void WaitForPreviousFram();
-
-		void AddDebugText(std::string_view text, int32_t x, int32_t y);
-
-	private:
 		ComPtr<ID3D12Device> mDevice;
 		ComPtr<ID3D12CommandQueue> mCommandQueue;
 		ComPtr<IDXGISwapChain3> mSwapChain;
@@ -62,14 +66,30 @@ namespace BirdGame
 		ComPtr<ID3D12Resource> mRenderTargets[kNumBufferFrames];
 		ComPtr<ID3D12GraphicsCommandList> mCommandList;
 
-		//TexturedTriangleRenderer mTriangleRenderer;
-		//TextRenderer mTextRenderer;
+		ComPtr<ID3D12PipelineState> mPipelineState;
 
 		uint32_t mFrameIndex;
 		ComPtr<ID3D12Fence> mFence;
 		HANDLE mFenceEvent;
 		uint64_t mFenceValue;
+
+		friend class Renderer;
 	};
+}
+
+BirdGame::RendererImpl::RendererImpl() :
+	mWidth(0), mHeight(0),
+	mRtvDescriptorSize(0),
+	mFrameIndex(0),
+	mFenceEvent(NULL),
+	mFenceValue(0)
+{
+}
+
+BirdGame::RendererImpl::~RendererImpl()
+{
+	// TODO should we do this?
+	// Shutdown()
 }
 
 void BirdGame::RendererImpl::CreateDevice()
@@ -179,6 +199,97 @@ void BirdGame::RendererImpl::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t
 	CheckHResult(mDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&mCommandAllocator)));
 }
 
+void BirdGame::RendererImpl::LoadAssets()
+{
+	CreateCommandList();
+	CreateFence();
+}
+
+void BirdGame::RendererImpl::ExecuteCommandList()
+{
+	ID3D12CommandList* ppCommandLists[] = { mCommandList.Get() };
+	mCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+}
+
+void BirdGame::RendererImpl::Present()
+{
+	// Present the frame.
+	CheckHResult(mSwapChain->Present(1, 0));
+}
+
+void BirdGame::RendererImpl::WaitForPreviousFrame()
+{
+	// WAITING FOR THE FRAME TO COMPLETE BEFORE CONTINUING IS NOT BEST PRACTICE.
+	// This is code implemented as such for simplicity. The D3D12HelloFrameBuffering
+	// sample illustrates how to use fences for efficient resource usage and to
+	// maximize GPU utilization.
+
+	// Signal and increment the fence value.
+	const UINT64 fence = mFenceValue;
+	CheckHResult(mCommandQueue->Signal(mFence.Get(), fence));
+	mFenceValue++;
+
+	// Wait until the previous frame is finished.
+	if (mFence->GetCompletedValue() < fence)
+	{
+		CheckHResult(mFence->SetEventOnCompletion(fence, mFenceEvent));
+		WaitForSingleObject(mFenceEvent, INFINITE);
+	}
+
+	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
+}
+
+void BirdGame::RendererImpl::CreateCommandList()
+{
+	// Create the command list.
+	CheckHResult(mDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, mCommandAllocator.Get(), nullptr, IID_PPV_ARGS(&mCommandList)));
+
+	// Command lists are created in the recording state, but there is nothing
+	// to record yet. The main loop expects it to be closed, so close it now.
+	CheckHResult(mCommandList->Close());
+}
+
+// A fence is a synchronization primitive that we can use to signal that the GPU is done rendering a frame
+void BirdGame::RendererImpl::CreateFence()
+{
+	CheckHResult(mDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&mFence)));
+	mFenceValue = 1;
+
+	// Create an event handle to use for frame synchronization.
+	mFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+	if (mFenceEvent == nullptr)
+	{
+		CheckHResult(HRESULT_FROM_WIN32(GetLastError()));
+	}
+}
+
+void BirdGame::RendererImpl::PopulateCommandList()
+{
+	// Command list allocators can only be reset when the associated 
+	// command lists have finished execution on the GPU; apps should use 
+	// fences to determine GPU execution progress.
+	CheckHResult(mCommandAllocator->Reset());
+
+	// However, when ExecuteCommandList() is called on a particular command 
+	// list, that command list can then be reset at any time and must be before 
+	// re-recording.
+	CheckHResult(mCommandList->Reset(mCommandAllocator.Get(), mPipelineState.Get()));
+
+	// Indicate that the back buffer will be used as a render target.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), mFrameIndex, mRtvDescriptorSize);
+
+	// Record commands.
+	const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+	mCommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+
+	// Indicate that the back buffer will now be used to present.
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+	CheckHResult(mCommandList->Close());
+}
+
 #pragma endregion
 
 // ------------------------------------------------------------------------------------------------
@@ -192,16 +303,30 @@ BirdGame::Renderer::~Renderer()
 
 void BirdGame::Renderer::Initialize(Window& window)
 {
+	mImpl = std::make_unique<RendererImpl>();
+	mImpl->CreateDevice();
+	mImpl->CreateCommandQueue();
+	mImpl->CreateSwapChain(window.GetHandle(), window.GetWidth(), window.GetHeight());
+	mImpl->LoadAssets();
+	//mImpl->LoadShader(); // TODO load shader in LoadAssets()
+
+	// Wait for all the setup work we just did to complete because we are going to re-use the command list
+	mImpl->WaitForPreviousFrame();
 }
 
 void BirdGame::Renderer::Shutdown()
 {
+	// Ensure that the GPU is no longer referencing resources that are about to be
+	// cleaned up by the destructor.
+	mImpl->WaitForPreviousFrame();
+
+	CloseHandle(mImpl->mFenceEvent);
 }
 
 void BirdGame::Renderer::Render()
 {
-}
-
-void BirdGame::Renderer::AddDebugText(std::string_view text, int32_t x, int32_t y)
-{
+	mImpl->PopulateCommandList();
+	mImpl->ExecuteCommandList();
+	mImpl->Present();
+	mImpl->WaitForPreviousFrame();
 }

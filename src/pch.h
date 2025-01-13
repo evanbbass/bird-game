@@ -9,10 +9,11 @@
 #include <wrl.h>
 
 // DirectX
-#include <directx/d3d12.h> // This helper library has to be included before any SDK headers
+#include <directx/d3dx12.h> // This helper library has to be included before any SDK headers
 #include <d3d12.h>
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
+#include <dxcapi.h>
 #include <dxgi1_4.h>
 
 // Standard libraries

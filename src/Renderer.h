@@ -22,8 +22,6 @@ namespace BirdGame
 
 		void Render();
 
-		void AddDebugText(std::string_view text, int32_t x, int32_t y);
-
 	private:
 		Renderer(const Renderer&) = delete;
 
