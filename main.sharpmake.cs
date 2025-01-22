@@ -18,7 +18,7 @@ public class BirdGameProject : Project
         // Specify the targets for which we want to generate a configuration for
         // Include both VS2017 and VS2022 since IG PCs are on 2017
         AddTargets(new Target(
-            Platform.win32 | Platform.win64,
+            Platform.win64,
             DevEnv.vs2017 | DevEnv.vs2022,
             Optimization.Debug | Optimization.Release));
     }
@@ -74,7 +74,19 @@ public class BirdGameProject : Project
 		conf.LibraryFiles.Add("dxgi");
 		conf.LibraryFiles.Add("d3dcompiler");
 		conf.LibraryFiles.Add("dxguid");
-	}
+
+        // Copy Assets folder to destination. Mirror the file structure
+        conf.EventPostBuildExe.Add(
+            new Configuration.BuildStepCopy(
+                Path.Join("[project.SharpmakeCsPath]", "assets"),   // sourcePath
+				Path.Join("[conf.TargetPath]", "assets"),           // destinationPath
+                false,                                              // isNameSpecific (default)
+                "*",                                                // copyPattern (default)
+				true,                                               // fileCopy (default)
+				true                                                // mirror
+			 )
+        );
+    }
 }
 
 [Generate]
@@ -87,7 +99,7 @@ public class BirdGameSolution : Solution
 
 		// As with the project, define which target this solution builds for.
 		AddTargets(new Target(
-			Platform.win32 | Platform.win64,
+			Platform.win64,
 			DevEnv.vs2017 | DevEnv.vs2022,
 			Optimization.Debug | Optimization.Release));
 	}
