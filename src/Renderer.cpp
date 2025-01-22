@@ -28,16 +28,14 @@ namespace
 
 namespace BirdGame
 {
-	class RendererImpl
+	class RendererImpl final
 	{
 	public:
 		RendererImpl();
 		~RendererImpl();
 
 		// Initialization methods
-		void CreateDevice();
-		void CreateCommandQueue();
-		void CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height);
+		void LoadPipeline(HWND hwnd, uint32_t width, uint32_t height);
 		void LoadAssets();
 
 		// Render methods
@@ -48,18 +46,26 @@ namespace BirdGame
 		// TODO apparently this is bad, look into the frame buffer DX sample project
 		void WaitForPreviousFrame();
 
+		void Destroy();
+
 	private:
+
+		void CreateDevice();
+		void CreateCommandQueue();
+		void CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height);
+
 		void CreateCommandList();
 		void LoadShaders();
 		void CreateFence();
+
+		uint32_t mWidth;
+		uint32_t mHeight;
+		float mAspectRatio;
 
 		ComPtr<ID3D12Device> mDevice;
 		ComPtr<ID3D12CommandQueue> mCommandQueue;
 		ComPtr<IDXGISwapChain3> mSwapChain;
 		ComPtr<ID3D12CommandAllocator> mCommandAllocator;
-
-		uint32_t mWidth;
-		uint32_t mHeight;
 
 		ComPtr<ID3D12DescriptorHeap> mRtvHeap;
 		uint32_t mRtvDescriptorSize;
@@ -73,13 +79,12 @@ namespace BirdGame
 		ComPtr<ID3D12Fence> mFence;
 		HANDLE mFenceEvent;
 		uint64_t mFenceValue;
-
-		friend class Renderer;
 	};
 }
 
 BirdGame::RendererImpl::RendererImpl() :
 	mWidth(0), mHeight(0),
+	mAspectRatio(0.0f),
 	mRtvDescriptorSize(0),
 	mFrameIndex(0),
 	mFenceEvent(NULL),
@@ -90,114 +95,15 @@ BirdGame::RendererImpl::RendererImpl() :
 BirdGame::RendererImpl::~RendererImpl()
 {
 	// TODO should we do this?
-	// Shutdown();
+	// Destroy is called in Renderer::Shutdown() so this might be redundant
+	// Destroy();
 }
 
-void BirdGame::RendererImpl::CreateDevice()
+void BirdGame::RendererImpl::LoadPipeline(HWND hwnd, uint32_t width, uint32_t height)
 {
-	UINT dxgiFactoryFlags = 0;
-
-#if defined(_DEBUG)
-	// Enable the debug layer (requires the Graphics Tools "optional feature").
-	// NOTE: Enabling the debug layer after device creation will invalidate the active device.
-	{
-		ComPtr<ID3D12Debug> debugController;
-		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
-		{
-			debugController->EnableDebugLayer();
-
-			// Enable additional debug layers.
-			dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-		}
-	}
-#endif
-
-	// Factory for creating device
-	ComPtr<IDXGIFactory4> factory;
-	CheckHResult(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)));
-
-	// Get hardware adapter (nullptr for now??? DX sample has a helper method to grab this. Template leaves this null unless using a warp adapter)
-	ComPtr<IDXGIAdapter1> adapter = nullptr;
-
-	// Create the device
-	CheckHResult(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&mDevice)));
-}
-
-void BirdGame::RendererImpl::CreateCommandQueue()
-{
-	// Describe and create the command queue.
-	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-
-	// TODO replace the assert since this might fail at runtime
-	CheckHResult(mDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&mCommandQueue)));
-}
-
-void BirdGame::RendererImpl::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height)
-{
-	mWidth = width;
-	mHeight = height;
-
-	// Create the swap chain
-	{
-		ComPtr<IDXGIFactory4> factory;
-		CheckHResult(CreateDXGIFactory1(IID_PPV_ARGS(&factory)));
-
-		// Describe and create the swap chain.
-		DXGI_SWAP_CHAIN_DESC1 swapChainDesc = { 0 };
-		swapChainDesc.BufferCount = kNumBufferFrames;
-		swapChainDesc.Width = width;
-		swapChainDesc.Height = height;
-		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-		swapChainDesc.SampleDesc.Count = 1;
-
-		ComPtr<IDXGISwapChain1> tempSwapChain;
-		CheckHResult(factory->CreateSwapChainForHwnd(mCommandQueue.Get(), // Swap chain needs the queue so that it can force a flush on it.
-			hwnd,
-			&swapChainDesc,
-			nullptr,
-			nullptr,
-			&tempSwapChain));
-
-		CheckHResult(tempSwapChain->QueryInterface(IID_PPV_ARGS(&mSwapChain)));
-
-		// This sample does not support fullscreen transitions.
-		CheckHResult(factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER));
-	}
-
-	// Grab the back buffer index
-	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
-
-	// Create descriptor heaps
-	{
-		// Describe and create a render target view (RTV) descriptor heap
-		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-		rtvHeapDesc.NumDescriptors = kNumBufferFrames;
-		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-		CheckHResult(mDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&mRtvHeap)));
-
-		mRtvDescriptorSize = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	}
-
-	// Create frame resources
-	{
-		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = mRtvHeap->GetCPUDescriptorHandleForHeapStart();
-
-		// Create a RTV for each frame
-		for (UINT n = 0; n < kNumBufferFrames; n++)
-		{
-			CheckHResult(mSwapChain->GetBuffer(n, IID_PPV_ARGS(&mRenderTargets[n])));
-			mDevice->CreateRenderTargetView(mRenderTargets[n].Get(), nullptr, rtvHandle);
-			rtvHandle.ptr += mRtvDescriptorSize;
-		}
-	}
-
-	// Create the command allocator
-	CheckHResult(mDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&mCommandAllocator)));
+	CreateDevice();
+	CreateCommandQueue();
+	CreateSwapChain(hwnd, width, height);
 }
 
 void BirdGame::RendererImpl::LoadAssets()
@@ -268,6 +174,124 @@ void BirdGame::RendererImpl::WaitForPreviousFrame()
 	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
 }
 
+void BirdGame::RendererImpl::Destroy()
+{
+	// Ensure that the GPU is no longer referencing resources that are about to be
+	// cleaned up by the destructor.
+	WaitForPreviousFrame();
+
+	CloseHandle(mFenceEvent);
+	mFenceEvent = NULL;
+}
+
+void BirdGame::RendererImpl::CreateDevice()
+{
+	UINT dxgiFactoryFlags = 0;
+
+#if defined(_DEBUG)
+	// Enable the debug layer (requires the Graphics Tools "optional feature").
+	// NOTE: Enabling the debug layer after device creation will invalidate the active device.
+	{
+		ComPtr<ID3D12Debug> debugController;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+		{
+			debugController->EnableDebugLayer();
+
+			// Enable additional debug layers.
+			dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+		}
+	}
+#endif
+
+	// Factory for creating device
+	ComPtr<IDXGIFactory4> factory;
+	CheckHResult(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)));
+
+	// Get hardware adapter (nullptr for now??? DX sample has a helper method to grab this. Template leaves this null unless using a warp adapter)
+	ComPtr<IDXGIAdapter1> adapter = nullptr;
+
+	// Create the device
+	CheckHResult(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&mDevice)));
+}
+
+void BirdGame::RendererImpl::CreateCommandQueue()
+{
+	// Describe and create the command queue.
+	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+
+	// TODO replace the assert since this might fail at runtime
+	CheckHResult(mDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&mCommandQueue)));
+}
+
+void BirdGame::RendererImpl::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height)
+{
+	mWidth = width;
+	mHeight = height;
+	mAspectRatio = static_cast<float>(width) / static_cast<float>(height);
+
+	// Create the swap chain
+	{
+		ComPtr<IDXGIFactory4> factory;
+		CheckHResult(CreateDXGIFactory1(IID_PPV_ARGS(&factory)));
+
+		// Describe and create the swap chain.
+		DXGI_SWAP_CHAIN_DESC1 swapChainDesc = { 0 };
+		swapChainDesc.BufferCount = kNumBufferFrames;
+		swapChainDesc.Width = mWidth;
+		swapChainDesc.Height = mHeight;
+		swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+		swapChainDesc.SampleDesc.Count = 1;
+
+		ComPtr<IDXGISwapChain1> tempSwapChain;
+		CheckHResult(factory->CreateSwapChainForHwnd(mCommandQueue.Get(), // Swap chain needs the queue so that it can force a flush on it.
+			hwnd,
+			&swapChainDesc,
+			nullptr,
+			nullptr,
+			&tempSwapChain));
+
+		CheckHResult(tempSwapChain->QueryInterface(IID_PPV_ARGS(&mSwapChain)));
+
+		// This sample does not support fullscreen transitions.
+		CheckHResult(factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER));
+	}
+
+	// Grab the back buffer index
+	mFrameIndex = mSwapChain->GetCurrentBackBufferIndex();
+
+	// Create descriptor heaps
+	{
+		// Describe and create a render target view (RTV) descriptor heap
+		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+		rtvHeapDesc.NumDescriptors = kNumBufferFrames;
+		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		CheckHResult(mDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&mRtvHeap)));
+
+		mRtvDescriptorSize = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	}
+
+	// Create frame resources
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = mRtvHeap->GetCPUDescriptorHandleForHeapStart();
+
+		// Create a RTV for each frame
+		for (UINT n = 0; n < kNumBufferFrames; n++)
+		{
+			CheckHResult(mSwapChain->GetBuffer(n, IID_PPV_ARGS(&mRenderTargets[n])));
+			mDevice->CreateRenderTargetView(mRenderTargets[n].Get(), nullptr, rtvHandle);
+			rtvHandle.ptr += mRtvDescriptorSize;
+		}
+	}
+
+	// Create the command allocator
+	CheckHResult(mDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&mCommandAllocator)));
+}
+
 void BirdGame::RendererImpl::CreateCommandList()
 {
 	// Create the command list.
@@ -311,11 +335,8 @@ BirdGame::Renderer::~Renderer()
 void BirdGame::Renderer::Initialize(Window& window)
 {
 	mImpl = std::make_unique<RendererImpl>();
-	mImpl->CreateDevice();
-	mImpl->CreateCommandQueue();
-	mImpl->CreateSwapChain(window.GetHandle(), window.GetWidth(), window.GetHeight());
+	mImpl->LoadPipeline(window.GetHandle(), window.GetWidth(), window.GetHeight());
 	mImpl->LoadAssets();
-	//mImpl->LoadShader(); // TODO load shader in LoadAssets()
 
 	// Wait for all the setup work we just did to complete because we are going to re-use the command list
 	mImpl->WaitForPreviousFrame();
@@ -323,11 +344,7 @@ void BirdGame::Renderer::Initialize(Window& window)
 
 void BirdGame::Renderer::Shutdown()
 {
-	// Ensure that the GPU is no longer referencing resources that are about to be
-	// cleaned up by the destructor.
-	mImpl->WaitForPreviousFrame();
-
-	CloseHandle(mImpl->mFenceEvent);
+	mImpl->Destroy();
 }
 
 void BirdGame::Renderer::Render()
