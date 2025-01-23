@@ -4,7 +4,7 @@
 
 namespace BirdGame
 {
-	class Renderer;
+	class IRenderer;
 	class Window;
 
 	class Application final
@@ -29,7 +29,7 @@ namespace BirdGame
 		void Render();
 
 		std::unique_ptr<Window> mWindow;
-		std::unique_ptr<Renderer> mRenderer;
+		std::unique_ptr<IRenderer> mRenderer;
 
 		static std::unique_ptr<Application> mInstance;
 	};

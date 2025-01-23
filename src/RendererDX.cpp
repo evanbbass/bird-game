@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Renderer.h"
+#include "RendererDX.h"
 
 #include "Window.h"
 
@@ -446,15 +446,15 @@ void BirdGame::RendererImpl::CreateFence()
 #pragma endregion
 
 // ------------------------------------------------------------------------------------------------
-BirdGame::Renderer::Renderer()
+BirdGame::RendererDX::RendererDX()
 {
 }
 
-BirdGame::Renderer::~Renderer()
+BirdGame::RendererDX::~RendererDX()
 {
 }
 
-void BirdGame::Renderer::Initialize(Window& window)
+void BirdGame::RendererDX::Initialize(Window& window)
 {
 	mImpl = std::make_unique<RendererImpl>();
 	mImpl->LoadPipeline(window.GetHandle(), window.GetWidth(), window.GetHeight());
@@ -466,12 +466,12 @@ void BirdGame::Renderer::Initialize(Window& window)
 	mImpl->WaitForPreviousFrame();
 }
 
-void BirdGame::Renderer::Shutdown()
+void BirdGame::RendererDX::Shutdown()
 {
 	mImpl->Destroy();
 }
 
-void BirdGame::Renderer::Render()
+void BirdGame::RendererDX::Render()
 {
 	mImpl->PopulateCommandList();
 	mImpl->ExecuteCommandList();

@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Application.h"
 
-#include "Renderer.h"
+#include "RendererDX.h"
 #include "Window.h"
 
 #include <assert.h>
@@ -21,7 +21,7 @@ void BirdGame::Application::Initialize(HINSTANCE hInstance, int nCmdShow)
 	mInstance.reset(new Application());
 	mInstance->mWindow.reset(new Window());
 	mInstance->mWindow->Initialize(L"Bird Game", 960, 720, hInstance, nCmdShow);
-	mInstance->mRenderer.reset(new Renderer());
+	mInstance->mRenderer.reset(new RendererDX());
 	mInstance->mRenderer->Initialize(*mInstance->mWindow);
 }
 
