@@ -259,7 +259,6 @@ void BirdGame::RendererImpl::CreateCommandQueue()
 	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
-	// TODO replace the assert since this might fail at runtime
 	CheckHResult(mDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&mCommandQueue)));
 }
 
@@ -351,8 +350,6 @@ void BirdGame::RendererImpl::LoadShaders()
 		UINT compileFlags = 0;
 #endif
 
-		// NOTE Working Directory needs to be set in project configuration. Since this is stored in the .vxproj.user file,
-		// SharpMake needs special steps to set this correctly. Look into how to do it automatically, but for now remember to go set it :)
 		CheckHResult(D3DCompileFromFile(L"assets/shaders/shaders.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
 		CheckHResult(D3DCompileFromFile(L"assets/shaders/shaders.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
 

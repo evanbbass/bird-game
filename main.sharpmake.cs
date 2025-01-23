@@ -86,6 +86,12 @@ public class BirdGameProject : Project
 				true                                                // mirror
 			 )
         );
+
+        // Set the working directory in the user file so the program knows where to find the shader file
+        conf.VcxprojUserFile = new Configuration.VcxprojUserFileSettings()
+        {
+            LocalDebuggerWorkingDirectory = "[conf.TargetPath]"
+        };
     }
 }
 
