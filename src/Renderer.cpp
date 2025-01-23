@@ -18,8 +18,7 @@ namespace
 	{
 		if (FAILED(result))
 		{
-			// TODO throw exception maybe?
-			assert(false);
+			throw std::exception("borked");
 		}
 	}
 }
