@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "Application.h"
 
+#include "Renderer.h"
+#include "Window.h"
+
 #include <assert.h>
 
 std::unique_ptr<BirdGame::Application> BirdGame::Application::mInstance;
@@ -16,8 +19,10 @@ BirdGame::Application::~Application()
 void BirdGame::Application::Initialize(HINSTANCE hInstance, int nCmdShow)
 {
 	mInstance.reset(new Application());
-	mInstance->mWindow.Initialize(L"Bird Game", 960, 720, hInstance, nCmdShow);
-	mInstance->mRenderer.Initialize(mInstance->mWindow);
+	mInstance->mWindow.reset(new Window());
+	mInstance->mWindow->Initialize(L"Bird Game", 960, 720, hInstance, nCmdShow);
+	mInstance->mRenderer.reset(new Renderer());
+	mInstance->mRenderer->Initialize(*mInstance->mWindow);
 }
 
 BirdGame::Application& BirdGame::Application::Instance()
@@ -28,7 +33,7 @@ BirdGame::Application& BirdGame::Application::Instance()
 
 int BirdGame::Application::Run()
 {
-	while (mWindow.ProcessMessages())
+	while (mWindow->ProcessMessages())
 	{
 		Update();
 		Render();
@@ -50,5 +55,5 @@ void BirdGame::Application::Update()
 
 void BirdGame::Application::Render()
 {
-	mRenderer.Render();
+	mRenderer->Render();
 }

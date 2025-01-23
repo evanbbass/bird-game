@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Renderer.h"
-#include "Window.h"
-
 #include <memory>
 
 namespace BirdGame
 {
+	class Renderer;
+	class Window;
+
 	class Application final
 	{
 	public:
@@ -28,8 +28,8 @@ namespace BirdGame
 		void Update();
 		void Render();
 
-		Window mWindow;
-		Renderer mRenderer;
+		std::unique_ptr<Window> mWindow;
+		std::unique_ptr<Renderer> mRenderer;
 
 		static std::unique_ptr<Application> mInstance;
 	};
