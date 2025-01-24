@@ -71,7 +71,7 @@ namespace BirdGame
 {
 	class RendererImpl final
 	{
-	public:
+	private:
 		struct Vertex
 		{
 			DirectX::XMFLOAT3 position;
@@ -563,8 +563,6 @@ void BirdGame::RendererImpl::CreateTexture()
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = 1;
 	mDevice->CreateShaderResourceView(mTexture.Get(), &srvDesc, mSrvHeap->GetCPUDescriptorHandleForHeapStart());
-
-	CloseAndExecuteCommandList();
 }
 
 // A fence is a synchronization primitive that we can use to signal that the GPU is done rendering a frame
@@ -595,7 +593,7 @@ BirdGame::RendererDX::~RendererDX()
 
 void BirdGame::RendererDX::Initialize(Window& window)
 {
-	mImpl = std::make_unique<RendererImpl>();
+	mImpl.reset(new RendererImpl());
 	mImpl->LoadPipeline(window.GetHandle(), window.GetWidth(), window.GetHeight());
 	mImpl->LoadAssets();
 
