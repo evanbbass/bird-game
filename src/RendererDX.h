@@ -10,7 +10,7 @@ namespace BirdGame
 	{
 	public:
 		RendererDX();
-		virtual ~RendererDX();
+		~RendererDX();
 
 		virtual void Initialize(Window& window) override;
 		virtual void Shutdown() override;

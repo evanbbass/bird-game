@@ -13,6 +13,9 @@ using Microsoft::WRL::ComPtr;
 namespace
 {
 	constexpr uint32_t kNumBufferFrames = 2;
+	constexpr uint32_t kTextureWidth = 256;
+	constexpr uint32_t kTextureHeight = 256;
+	constexpr uint32_t kTexturePixelSize = 4;    // The number of bytes used to represent a pixel in the texture.
 
 	void CheckHResult(HRESULT result)
 	{
@@ -20,6 +23,45 @@ namespace
 		{
 			throw std::exception("borked");
 		}
+	}
+
+	// Generate a simple black and white checkerboard texture.
+	std::vector<uint8_t> GenerateTextureData()
+	{
+		const uint32_t rowPitch = kTextureWidth * kTexturePixelSize;
+		const uint32_t cellPitch = rowPitch >> 3;        // The width of a cell in the checkboard texture.
+		const uint32_t cellHeight = kTextureWidth >> 3;    // The height of a cell in the checkerboard texture.
+		const uint32_t textureSize = rowPitch * kTextureHeight;
+
+		std::vector<uint8_t> data(textureSize);
+		uint8_t* pData = &data[0];
+
+		for (uint32_t n = 0; n < textureSize; n += kTexturePixelSize)
+		{
+			uint32_t x = n % rowPitch;
+			uint32_t y = n / rowPitch;
+			uint32_t i = x / cellPitch;
+			uint32_t j = y / cellHeight;
+
+			if (i % 2 == j % 2)
+			{
+				// Black square if row and column are both even or both odd
+				pData[n] = 0x00;        // R
+				pData[n + 1] = 0x00;    // G
+				pData[n + 2] = 0x00;    // B
+				pData[n + 3] = 0xff;    // A
+			}
+			else
+			{
+				// White square if row and column are different odd/even states
+				pData[n] = 0xff;        // R
+				pData[n + 1] = 0xff;    // G
+				pData[n + 2] = 0xff;    // B
+				pData[n + 3] = 0xff;    // A
+			}
+		}
+
+		return data;
 	}
 }
 
@@ -33,7 +75,7 @@ namespace BirdGame
 		struct Vertex
 		{
 			DirectX::XMFLOAT3 position;
-			DirectX::XMFLOAT4 color;
+			DirectX::XMFLOAT2 uv;
 		};
 
 	public:
@@ -46,7 +88,7 @@ namespace BirdGame
 
 		// Render methods
 		void PopulateCommandList();
-		void ExecuteCommandList();
+		void CloseAndExecuteCommandList();
 		void Present();
 
 		// TODO apparently this is bad, look into the frame buffer DX sample project
@@ -63,6 +105,7 @@ namespace BirdGame
 		void LoadShaders();
 		void CreateCommandList();
 		void CreateVertexBuffer();
+		void CreateTexture();
 		void CreateFence();
 
 		CD3DX12_VIEWPORT mViewport;
@@ -76,6 +119,7 @@ namespace BirdGame
 		ComPtr<ID3D12RootSignature> mRootSignature;
 
 		ComPtr<ID3D12DescriptorHeap> mRtvHeap;
+		ComPtr<ID3D12DescriptorHeap> mSrvHeap;
 		uint32_t mRtvDescriptorSize;
 
 		ComPtr<ID3D12Resource> mRenderTargets[kNumBufferFrames];
@@ -86,6 +130,7 @@ namespace BirdGame
 		// App resources.
 		ComPtr<ID3D12Resource> mVertexBuffer;
 		D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
+		ComPtr<ID3D12Resource> mTexture;
 
 		uint32_t mFrameIndex;
 		ComPtr<ID3D12Fence> mFence;
@@ -96,6 +141,7 @@ namespace BirdGame
 
 BirdGame::RendererImpl::RendererImpl() :
 	mRtvDescriptorSize(0),
+	mVertexBufferView(),
 	mFrameIndex(0),
 	mFenceEvent(NULL),
 	mFenceValue(0)
@@ -122,6 +168,8 @@ void BirdGame::RendererImpl::LoadAssets()
 	LoadShaders();
 	CreateCommandList();
 	CreateVertexBuffer(); // Set up the vertex buffers here for now since this shader is very basic and not doing anything interesting
+	CreateTexture();
+	CloseAndExecuteCommandList(); // Close the command list and execute it to begin the initial GPU setup.
 	CreateFence();
 }
 
@@ -157,14 +205,13 @@ void BirdGame::RendererImpl::PopulateCommandList()
 
 	// Indicate that the back buffer will now be used to present.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mRenderTargets[mFrameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-
-	CheckHResult(mCommandList->Close());
 }
 
-void BirdGame::RendererImpl::ExecuteCommandList()
+void BirdGame::RendererImpl::CloseAndExecuteCommandList()
 {
+	CheckHResult(mCommandList->Close());
 	ID3D12CommandList* ppCommandLists[] = { mCommandList.Get() };
-	mCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+	mCommandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 }
 
 void BirdGame::RendererImpl::Present()
@@ -305,6 +352,13 @@ void BirdGame::RendererImpl::CreateSwapChain(HWND hwnd)
 		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 		CheckHResult(mDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&mRtvHeap)));
 
+		// Describe and create a shader resource view (SRV) heap for the texture.
+		D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+		srvHeapDesc.NumDescriptors = 1;
+		srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+		CheckHResult(mDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSrvHeap)));
+
 		mRtvDescriptorSize = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	}
 
@@ -327,14 +381,45 @@ void BirdGame::RendererImpl::CreateSwapChain(HWND hwnd)
 
 void BirdGame::RendererImpl::LoadShaders()
 {
-	// Create an empty root signature.
+	// Create the root signature.
 	{
-		CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
-		rootSignatureDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+		D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
+
+		// This is the highest version the sample supports. If CheckFeatureSupport succeeds, the HighestVersion returned will not be greater than this.
+		featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+
+		if (FAILED(mDevice->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
+		{
+			featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
+		}
+
+		CD3DX12_DESCRIPTOR_RANGE1 ranges[1] = {};
+		ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+
+		CD3DX12_ROOT_PARAMETER1 rootParameters[1] = {};
+		rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
+
+		D3D12_STATIC_SAMPLER_DESC sampler = {};
+		sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+		sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.MipLODBias = 0;
+		sampler.MaxAnisotropy = 0;
+		sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+		sampler.MinLOD = 0.0f;
+		sampler.MaxLOD = D3D12_FLOAT32_MAX;
+		sampler.ShaderRegister = 0;
+		sampler.RegisterSpace = 0;
+		sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+		rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 		ComPtr<ID3DBlob> signature;
 		ComPtr<ID3DBlob> error;
-		CheckHResult(D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error));
+		CheckHResult(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion, &signature, &error));
 		CheckHResult(mDevice->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&mRootSignature)));
 	}
 
@@ -357,7 +442,7 @@ void BirdGame::RendererImpl::LoadShaders()
 		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
 		{
 			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-			{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 		};
 
 		// Describe and create the graphics pipeline state object (PSO).
@@ -383,11 +468,7 @@ void BirdGame::RendererImpl::LoadShaders()
 void BirdGame::RendererImpl::CreateCommandList()
 {
 	// Create the command list.
-	CheckHResult(mDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, mCommandAllocator.Get(), nullptr, IID_PPV_ARGS(&mCommandList)));
-
-	// Command lists are created in the recording state, but there is nothing
-	// to record yet. The main loop expects it to be closed, so close it now.
-	CheckHResult(mCommandList->Close());
+	CheckHResult(mDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, mCommandAllocator.Get(), mPipelineState.Get(), IID_PPV_ARGS(&mCommandList)));
 }
 
 void BirdGame::RendererImpl::CreateVertexBuffer()
@@ -396,9 +477,9 @@ void BirdGame::RendererImpl::CreateVertexBuffer()
 	float aspectRatio = mViewport.Width / mViewport.Height;
 	Vertex triangleVertices[] =
 	{
-		{ { 0.0f, 0.25f * aspectRatio, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-		{ { 0.25f, -0.25f * aspectRatio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.25f, -0.25f * aspectRatio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
+        { { 0.0f, 0.25f * aspectRatio, 0.0f }, { 0.5f, 0.0f } },
+        { { 0.25f, -0.25f * aspectRatio, 0.0f }, { 1.0f, 1.0f } },
+        { { -0.25f, -0.25f * aspectRatio, 0.0f }, { 0.0f, 1.0f } }
 	};
 
 	const UINT vertexBufferSize = sizeof(triangleVertices);
@@ -416,7 +497,7 @@ void BirdGame::RendererImpl::CreateVertexBuffer()
 		IID_PPV_ARGS(&mVertexBuffer)));
 
 	// Copy the triangle data to the vertex buffer.
-	UINT8* pVertexDataBegin;
+	uint8_t* pVertexDataBegin = nullptr;
 	CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
 	CheckHResult(mVertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
 	memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
@@ -426,6 +507,64 @@ void BirdGame::RendererImpl::CreateVertexBuffer()
 	mVertexBufferView.BufferLocation = mVertexBuffer->GetGPUVirtualAddress();
 	mVertexBufferView.StrideInBytes = sizeof(Vertex);
 	mVertexBufferView.SizeInBytes = vertexBufferSize;
+}
+
+void BirdGame::RendererImpl::CreateTexture()
+{
+	// Describe and create a Texture2D
+	D3D12_RESOURCE_DESC textureDesc = {};
+	textureDesc.MipLevels = 1;
+	textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	textureDesc.Width = kTextureWidth;
+	textureDesc.Height = kTextureHeight;
+	textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	textureDesc.DepthOrArraySize = 1;
+	textureDesc.SampleDesc.Count = 1;
+	textureDesc.SampleDesc.Quality = 0;
+	textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+	CheckHResult(mDevice->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&textureDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&mTexture)));
+
+	const uint64_t uploadBufferSize = GetRequiredIntermediateSize(mTexture.Get(), 0, 1);
+
+	// Create the GPU upload buffer
+	ID3D12Resource* textureUploadHeap; // Use raw pointer here instead of ComPtr because we want this to exist until it has finished executing on the GPU
+	CheckHResult(mDevice->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&textureUploadHeap)));
+
+	// Copy data to the intermediate upload heap and then schedule a copy 
+	// from the upload heap to the Texture2D.
+	std::vector<uint8_t> texture = GenerateTextureData();
+
+	D3D12_SUBRESOURCE_DATA textureData = {};
+	textureData.pData = &texture[0];
+	textureData.RowPitch = static_cast<LONG_PTR>(kTextureWidth) * static_cast<LONG_PTR>(kTexturePixelSize);
+	textureData.SlicePitch = textureData.RowPitch * kTextureHeight;
+
+	// This is a helper function in d3dx12.h that copies data to a default heap (used by the texture) via the upload heap using CopyTextureRegion.
+	UpdateSubresources(mCommandList.Get(), mTexture.Get(), textureUploadHeap, 0, 0, 1, &textureData);
+	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mTexture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
+	// Describe and create a SRV for the texture.
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = textureDesc.Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+	mDevice->CreateShaderResourceView(mTexture.Get(), &srvDesc, mSrvHeap->GetCPUDescriptorHandleForHeapStart());
+
+	CloseAndExecuteCommandList();
 }
 
 // A fence is a synchronization primitive that we can use to signal that the GPU is done rendering a frame
@@ -474,7 +613,7 @@ void BirdGame::RendererDX::Shutdown()
 void BirdGame::RendererDX::Render()
 {
 	mImpl->PopulateCommandList();
-	mImpl->ExecuteCommandList();
+	mImpl->CloseAndExecuteCommandList();
 	mImpl->Present();
 	mImpl->WaitForPreviousFrame();
 }
