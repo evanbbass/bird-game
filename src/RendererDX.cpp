@@ -539,7 +539,9 @@ void BirdGame::RendererImpl::CreateTexture()
 	const uint64_t uploadBufferSize = GetRequiredIntermediateSize(mTexture.Get(), 0, 1);
 
 	// Create the GPU upload buffer
-	ID3D12Resource* textureUploadHeap; // Use raw pointer here instead of ComPtr because we want this to exist until it has finished executing on the GPU
+	// Use raw pointer here instead of ComPtr because we want this to exist until it has finished executing on the GPU (during WaitForNextFrame)
+	// Probably should find a better solution since this is never released currently
+	ID3D12Resource* textureUploadHeap;
 	CheckHResult(mDevice->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAG_NONE,
